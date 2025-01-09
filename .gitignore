@@ -41,3 +41,6 @@ ENV/
 htmlcov/ 
 
 crew_ai_README.md
+
+# Add this section
+Gateway/__pycache__/
