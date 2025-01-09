@@ -21,7 +21,7 @@ RosettaNews is an AI-powered news aggregation system that automatically scrapes 
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/RosettaNews.git
+git clone https://github.com/felixmd/rosetta_news.git
 cd RosettaNews
 ```
 
