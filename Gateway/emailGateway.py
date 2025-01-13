@@ -41,10 +41,11 @@ class EmailGateway(BaseTool):
         self.recipients = recipients
 
     def _run(self, markdown_content: str) -> str:
+        """Run the email sending tool with markdown content"""
         html_content = self._convert_markdown_to_html(markdown_content)
         success = self.sender.send_email(
             to=self.recipients,
-            subject="Today's News Digest",
+            subject="Daily Medical & Surgical News Digest",
             html_content=html_content
         )
         return "Email sent successfully" if success else "Failed to send email"
@@ -53,6 +54,7 @@ class EmailGateway(BaseTool):
         return self._run(markdown_content)
 
     def _convert_markdown_to_html(self, markdown_content: str) -> str:
+        """Convert markdown content to HTML"""
         try:
             html_content = markdown2.markdown(markdown_content)
             return f"""
@@ -67,5 +69,6 @@ class EmailGateway(BaseTool):
                     <body>{html_content}</body>
                 </html>
             """
-        except ImportError:
-            return f"<pre>{markdown_content}</pre>" 
+        except Exception as e:
+            logger.error(f"Error converting markdown to HTML: {str(e)}")
+            raise

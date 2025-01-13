@@ -1,108 +1,94 @@
 from crewai import Agent, Task, Crew
-from crewai_tools import ScrapeWebsiteTool, SerperDevTool
-from typing import List, Optional
+from crewai_tools import SerperDevTool, ScrapeWebsiteTool
+import sys
+import codecs
+import logging
+import traceback
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Set UTF-8 as default encoding for stdout
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
 
 def create_press_bureau_agent(url: str, language: str) -> Agent:
-    """Create a press bureau agent for news processing.
-    
-    Args:
-        url (str): The URL of the news website to scrape
-        language (str): The language of the news content
+    try:
+        if not url or not language:
+            raise ValueError("URL and language must be provided")
+        logger.info(f"Creating press bureau agent for URL: {url}")
         
-    Returns:
-        Agent: Configured press bureau agent
-    
-    Raises:
-        ValueError: If url or language is empty
-    """
-    if not url or not language:
-        raise ValueError("URL and language must be provided")
-    return Agent(
-        role="Press Bureau AI - Chief Intelligence Officer",
-        goal=f"Scrape the news website homepage with URL {url} and read complete news articles. "
-            f"This is a news portal in {language} language. "
-            "First get the top 10 headlines and their corresponding article URLs. "
-            "Then visit each article URL to read the full article content. "
-            "Summarize each complete article in English, maintaining the tone of the article. ",
-        backstory="You are a sophisticated press bureau agent, specializing in global news monitoring and synthesis. "
-            "For each headline you find, you will:"
-            "1. Extract the article's URL "
-            "2. Visit the full article page "
-            "3. Read and comprehend the complete article content "
-            "4. Translate the entire article to English "
-            "5. Provide a comprehensive summary of 2-3 paragraphs "
-            "Expert in AP/Reuters style guides, multi-language news analysis, and editorial standards. "
-            "All content generated should be based on the complete articles, not just headlines.",
-        verbose=True,
-        allow_delegation=False,
-    )
+        tools = [
+            SerperDevTool(),
+            ScrapeWebsiteTool()
+        ]
+        
+        return Agent(
+            role="Medical Press Bureau AI",
+            goal="Extract and summarize the latest medical news articles",
+            backstory="Expert in medical news curation and summarization, specializing in healthcare developments",
+            tools=tools,
+            verbose=True
+        )
+    except Exception as e:
+        logger.error(f"Error creating press bureau agent: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise
 
 def create_editor_agent() -> Agent:
     return Agent(
-        role="Editor-in-Chief",
-        goal="You will make sure the article maintains consistent editorial tone and voice"
-#            "You will check the article for libel and defamation"
-            "You will review story priority rankings"
- #           "You will verify headline accuracy and impact"
-            "You will double check translation accuracy",
-        backstory="A seasoned editorial AI agent with deep expertise in journalistic standards"
-#            ", fact-checking protocols,"
-            " and multi-language content verification. Trained in editorial practices of leading international news organizations."
-            "You are trained on decades of journalistic best practices from leading wire services and newspapers."
-            "You review the news articles submitted by the Press Bureau AI and provide feedback on the quality of the content."
-#            "You will perform libel and defamation checks on the news articles."
-            "You will enforce AP/Reuters style guidelines and editorial standards."
- #           "You will make sure journalistic ethics are upheld and the content is factually accurate."
-            "You will make sure the content is not biased and is fair and balanced."
-#            "You will make sure the content is not misleading and is clear and concise."
-            "You will make sure the content is not offensive and is appropriate for a global audience."
-            "You will make sure the content aligns with journalistic values.",
-        verbose=True,
-        allow_delegation=True,
+        role="Medical Editor",
+        goal="Review and enhance medical content for accuracy and clarity",
+        backstory="Expert medical editor with extensive experience in healthcare communications",
+        verbose=True
     )
 
-def create_rosetta_news_crew(url: str, language: str) -> Crew:
-    """
-    Create a crew of news agents to read news articles and generate wire service-style bulletins
-    """
-    press_bureau_agent = create_press_bureau_agent(url, language)
-    editor_agent = create_editor_agent()
+def create_medical_expert_agent() -> Agent:
+    return Agent(
+        role="Medical Expert Reviewer",
+        goal="Ensure medical accuracy and provide clinical context",
+        backstory="Board-certified physician with expertise in medical research and clinical practice",
+        verbose=True
+    )
 
-    search_tool = SerperDevTool()
-    scrape_tool = ScrapeWebsiteTool(url=url)
-    global_scrape_tool = ScrapeWebsiteTool()
-    bureau_task = Task(
-        description=(
-            "1. Visit the news website link at: {url} and find 10 headlines. Each headline will have a URL. Use tools at your disposal to access each URL's content and fetch detailed news for the article.\n"
-            "2. Generate headline and 2-3 paragraph summary of the article content in English. Article URL is optional.\n"
-            "3. Do not show any clear indication in the generated article that you are summarizing the original article (for example, starting the article with the "
-            "phrase 'This article explores' or similar. miantain the tone of the original article.\n"
-            "4. Format output in markdown with clear separation between articles.\n"
-        ),
-        expected_output="A list of 10 comprehensive article summaries in English, "
-            "formatted as an email-friendly markdown document with proper spacing and structure.",
-        tools=[search_tool, scrape_tool, global_scrape_tool],
-        agent=press_bureau_agent,
-    )   
-
-    editor_task = Task(
-                        description="1. Review the news articles and provide feedback on the quality of the content.\n"
-                        "2. Make sure the content is not biased and is fair and balanced.\n"
-#                        "3. Make sure the content is not misleading and is clear and concise.\n"
-                        "3. Make sure the content is not offensive and is appropriate for a global audience.\n"
-                        "4. Use neutral tone and language.\n"
-                        "5. Make sure article URL is included in the response.\n",
-                        expected_output="A well-written list of news articles "
-                                        "in markdown format, ready for publication, ",
-#                                        "each news article should not exceed more than 2 or 3 paragraphs.",
-                        agent=editor_agent,
-                    )   
-    
-    return Crew(
-        agents=[press_bureau_agent, editor_agent],
-        tasks=[bureau_task, editor_task],
-    #    manager=manager,
-        verbose=True,
-        memory=False
-    ) 
-
+def create_rosetta_news_crew(url: str, language: str = "English") -> Crew:
+    try:
+        press_bureau = create_press_bureau_agent(url=url, language=language)
+        logger.info("Creating editor agent")
+        editor = create_editor_agent()
+        logger.info("Creating medical expert agent")
+        medical_expert = create_medical_expert_agent()
+        
+        bureau_task = Task(
+            description="Find and summarize the top 5 latest medical news articles",
+            expected_output="A list of 5 comprehensive medical article summaries in markdown format",
+            agent=press_bureau
+        )
+        
+        expert_task = Task(
+            description="Review the medical content for accuracy and add clinical context",
+            expected_output="Reviewed and enhanced medical articles with clinical context",
+            agent=medical_expert
+        )
+        
+        editor_task = Task(
+            description="Polish the content for clarity while maintaining medical accuracy",
+            expected_output="Final polished medical news digest ready for distribution",
+            agent=editor
+        )
+        
+        logger.info("Creating crew")
+        return Crew(
+            agents=[press_bureau, medical_expert, editor],
+            tasks=[bureau_task, expert_task, editor_task],
+            verbose=True
+        )
+    except Exception as e:
+        logger.error(f"Error creating crew: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise

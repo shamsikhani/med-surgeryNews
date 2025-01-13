@@ -21,12 +21,15 @@ wheels/
 *.egg
 
 # Virtual Environment
-.env
 .venv
 env/
 venv/
 ENV/
 .rnews/
+
+# Environment variables
+.env
+.env.*
 
 # IDE
 .idea/
