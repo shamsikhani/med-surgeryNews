@@ -3,10 +3,10 @@ from pydantic_settings import BaseSettings
 NEWS_CATEGORIES = {
     'radiology': {
         'sources': [
-            'radiologytoday.net',
-            'auntminnie.com',
-            'radiologybusiness.com',
-            'itnonline.com'
+            'radiologytoday.net'
+            # 'auntminnie.com',
+            # 'radiologybusiness.com',
+            # 'itnonline.com'
         ],
         'queries': [
             'AI radiology',
