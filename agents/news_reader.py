@@ -1,94 +1,126 @@
-from crewai import Agent, Task, Crew
-from crewai_tools import SerperDevTool, ScrapeWebsiteTool
-import sys
-import codecs
+import os
 import logging
-import traceback
+from crewai import Agent, Task, Crew, Process
+from crewai_tools import SerperDevTool
+from dotenv import load_dotenv
+import markdown2
+import resend
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(process)d - %(name)s:%(lineno)d - %(levelname)s: %(message)s',
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Set UTF-8 as default encoding for stdout
-if sys.stdout.encoding != 'utf-8':
-    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
-    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+class NewsReaderAgent:
+    def __init__(self):
+        """Initialize the NewsReaderAgent"""
+        load_dotenv()
+        self.serper_api_key = os.getenv('SERPER_API_KEY')
+        self.openai_api_key = os.getenv('OPENAI_API_KEY')
+        self.resend_api_key = os.getenv('RESEND_API_KEY')
+        self.email_recipients = os.getenv('EMAIL_RECIPIENTS', '').split(',')
 
-def create_press_bureau_agent(url: str, language: str) -> Agent:
-    try:
-        if not url or not language:
-            raise ValueError("URL and language must be provided")
-        logger.info(f"Creating press bureau agent for URL: {url}")
-        
-        tools = [
-            SerperDevTool(),
-            ScrapeWebsiteTool()
-        ]
-        
-        return Agent(
-            role="Medical Press Bureau AI",
-            goal="Extract and summarize the latest medical news articles",
-            backstory="Expert in medical news curation and summarization, specializing in healthcare developments",
-            tools=tools,
-            verbose=True
-        )
-    except Exception as e:
-        logger.error(f"Error creating press bureau agent: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise
+    def search_news(self, query, source):
+        """Search for news using the specified query and source"""
+        try:
+            # Create the search tool
+            search_tool = SerperDevTool()
 
-def create_editor_agent() -> Agent:
-    return Agent(
-        role="Medical Editor",
-        goal="Review and enhance medical content for accuracy and clarity",
-        backstory="Expert medical editor with extensive experience in healthcare communications",
-        verbose=True
-    )
+            # Create the search agent
+            search_agent = Agent(
+                role='Search Agent',
+                goal='Find relevant medical AI news articles',
+                backstory='Expert at finding and analyzing medical news articles',
+                tools=[search_tool],
+                verbose=True,
+                allow_delegation=False
+            )
 
-def create_medical_expert_agent() -> Agent:
-    return Agent(
-        role="Medical Expert Reviewer",
-        goal="Ensure medical accuracy and provide clinical context",
-        backstory="Board-certified physician with expertise in medical research and clinical practice",
-        verbose=True
-    )
+            # Create the research task
+            search_task = Task(
+                description=f'Search for "{query}" from {source} and summarize the findings. Format each article as:\n# Title\nSummary\nURL',
+                expected_output="A list of articles with titles, summaries, and URLs in markdown format",
+                agent=search_agent
+            )
 
-def create_rosetta_news_crew(url: str, language: str = "English") -> Crew:
-    try:
-        press_bureau = create_press_bureau_agent(url=url, language=language)
-        logger.info("Creating editor agent")
-        editor = create_editor_agent()
-        logger.info("Creating medical expert agent")
-        medical_expert = create_medical_expert_agent()
-        
-        bureau_task = Task(
-            description="Find and summarize the top 5 latest medical news articles",
-            expected_output="A list of 5 comprehensive medical article summaries in markdown format",
-            agent=press_bureau
-        )
-        
-        expert_task = Task(
-            description="Review the medical content for accuracy and add clinical context",
-            expected_output="Reviewed and enhanced medical articles with clinical context",
-            agent=medical_expert
-        )
-        
-        editor_task = Task(
-            description="Polish the content for clarity while maintaining medical accuracy",
-            expected_output="Final polished medical news digest ready for distribution",
-            agent=editor
-        )
-        
-        logger.info("Creating crew")
-        return Crew(
-            agents=[press_bureau, medical_expert, editor],
-            tasks=[bureau_task, expert_task, editor_task],
-            verbose=True
-        )
-    except Exception as e:
-        logger.error(f"Error creating crew: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise
+            # Create and run the crew
+            crew = Crew(
+                agents=[search_agent],
+                tasks=[search_task],
+                process=Process.sequential,
+                verbose=True
+            )
+
+            # Execute the search
+            result = crew.kickoff()
+            
+            # Process the results into a structured format
+            if result and result.raw:
+                # Parse the raw results into a list of news items
+                news_items = []
+                current_item = None
+                
+                for line in result.raw.split('\n'):
+                    line = line.strip()
+                    if not line:
+                        continue
+                        
+                    if line.startswith('# '):
+                        if current_item:
+                            news_items.append(current_item)
+                        current_title = line[2:].strip()
+                        current_item = {
+                            'title': current_title,
+                            'snippet': '',
+                            'link': '',
+                            'source': source
+                        }
+                    elif line.startswith('http'):
+                        if current_item:
+                            current_item['link'] = line.strip()
+                    elif current_item:
+                        current_item['snippet'] += line + ' '
+                
+                if current_item:
+                    news_items.append(current_item)
+
+                return news_items
+            return []
+
+        except Exception as e:
+            logger.error(f"Error in search_news: {str(e)}")
+            return []
+
+    def send_email(self, content):
+        """Send email with the news content"""
+        try:
+            if not self.resend_api_key:
+                raise ValueError("Missing Resend API key")
+            if not self.email_recipients:
+                raise ValueError("No email recipients specified")
+
+            # Convert markdown to HTML
+            html_content = markdown2.markdown(content)
+
+            # Initialize Resend
+            resend.api_key = self.resend_api_key
+
+            # Send email
+            response = resend.Emails.send({
+                "from": "Medical News Digest <onboarding@resend.dev>",
+                "to": self.email_recipients,
+                "subject": "Latest Medical AI News Update",
+                "html": html_content
+            })
+
+            if response:
+                logger.info("Email sent successfully")
+                return "Email sent successfully"
+            else:
+                raise Exception("Failed to send email")
+
+        except Exception as e:
+            logger.error(f"Error sending email: {str(e)}")
+            raise
