@@ -4,6 +4,7 @@ import sys
 import codecs
 import logging
 import traceback
+from typing import List
 
 # Configure logging
 logging.basicConfig(
@@ -17,11 +18,11 @@ if sys.stdout.encoding != 'utf-8':
     sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
     sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
 
-def create_press_bureau_agent(url: str, language: str) -> Agent:
+def create_press_bureau_agent(urls: List[str], language: str) -> Agent:
     try:
-        if not url or not language:
-            raise ValueError("URL and language must be provided")
-        logger.info(f"Creating press bureau agent for URL: {url}")
+        if not urls or not language:
+            raise ValueError("URLs and language must be provided")
+        logger.info(f"Creating press bureau agent for URLs: {urls}")
         
         tools = [
             SerperDevTool(),
@@ -30,8 +31,8 @@ def create_press_bureau_agent(url: str, language: str) -> Agent:
         
         return Agent(
             role="Medical Press Bureau AI",
-            goal="Extract and summarize the latest medical news articles",
-            backstory="Expert in medical news curation and summarization, specializing in healthcare developments",
+            goal="Extract and summarize the latest medical news articles from multiple sources",
+            backstory="Expert in medical news curation and summarization, specializing in healthcare developments. Capable of analyzing multiple sources to identify the most significant developments.",
             tools=tools,
             verbose=True
         )
@@ -56,17 +57,23 @@ def create_medical_expert_agent() -> Agent:
         verbose=True
     )
 
-def create_rosetta_news_crew(url: str, language: str = "English") -> Crew:
+def create_rosetta_news_crew(urls: List[str], language: str = "English") -> Crew:
     try:
-        press_bureau = create_press_bureau_agent(url=url, language=language)
+        press_bureau = create_press_bureau_agent(urls=urls, language=language)
         logger.info("Creating editor agent")
         editor = create_editor_agent()
         logger.info("Creating medical expert agent")
         medical_expert = create_medical_expert_agent()
         
         bureau_task = Task(
-            description="Find and summarize the top 5 latest medical news articles",
-            expected_output="A list of 5 comprehensive medical article summaries in markdown format",
+            description=f"""
+            1. Search through all provided medical news sources: {', '.join(urls)}
+            2. Collect and analyze medical news articles from each source
+            3. Compare and evaluate the importance of articles across all sources
+            4. Select and summarize the top 5 most significant medical news articles
+            5. Format the summaries in markdown with clear headers and source attribution
+            """,
+            expected_output="A list of 5 most significant medical article summaries in markdown format, selected from all sources",
             agent=press_bureau
         )
         

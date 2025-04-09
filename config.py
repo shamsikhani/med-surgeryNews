@@ -1,9 +1,20 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 from typing import List
 
 class Settings(BaseSettings):
+    # API Keys
+    SERPER_API_KEY: str
+    RESEND_API_KEY: str
+    OPENAI_API_KEY: str
+    
+    # OpenAI Configuration
     OPENAI_API_BASE: str = "https://api.openai.com/v1"
     OPENAI_MODEL_NAME: str = "gpt-4"
+    
+    # Email Configuration
+    EMAIL_SUBJECT: str = "Daily Medical & Surgical News Digest"
+    EMAIL_SENDER: str = "Medical News <onboarding@resend.dev>"
+    EMAIL_RECIPIENTS: str
     
     # Medical news sources
     MEDICAL_NEWS_SOURCES: List[str] = [
@@ -13,9 +24,6 @@ class Settings(BaseSettings):
         "https://www.healthline.com/health-news"
     ]
     
-    # Email configuration
-    EMAIL_SUBJECT: str = "Daily Medical & Surgical News Digest"
-    EMAIL_SENDER: str = "Rosetta Medical News <onboarding@resend.dev>"
-    
     class Config:
         env_file = ".env"
+        env_file_encoding = "utf-8"

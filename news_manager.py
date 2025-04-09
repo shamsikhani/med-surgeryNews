@@ -1,10 +1,12 @@
 from dotenv import load_dotenv
 from agents.news_reader import create_rosetta_news_crew
 from Gateway.emailGateway import EmailGateway
+from config import Settings
 import os
 import warnings
 import logging
 import time
+import traceback
 
 # Configure logging
 logging.basicConfig(
@@ -23,63 +25,54 @@ REQUIRED_ENV_VARS = [
     "OPENAI_API_KEY"
 ]
 
-# Medical news source - focusing on most reliable source
-MEDICAL_NEWS_SOURCE = "https://www.news-medical.net/medical"
-
-def process_medical_news() -> str:
-    """
-    Process medical news from the specified source.
-    
-    Returns:
-        str: Processed news content
-    """
-    try:
-        logger.info(f"Processing news from: {MEDICAL_NEWS_SOURCE}")
-        crew = create_rosetta_news_crew(url=MEDICAL_NEWS_SOURCE, language="English")
-        result = crew.kickoff()
-        logger.info("Successfully processed medical news")
-        return result.raw
-    except Exception as e:
-        logger.error(f"Error processing medical news: {str(e)}")
-        raise
+def check_env_vars():
+    missing_vars = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
+    if missing_vars:
+        raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
 
 def main():
     try:
         # Check environment variables
-        missing_vars = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
-        if missing_vars:
-            raise EnvironmentError(f"Missing required environment variables: {', '.join(missing_vars)}")
-
-        # Setup email configuration
-        RECIPIENTS = os.getenv('EMAIL_RECIPIENTS', '').split(',')
-        if not RECIPIENTS or not all(RECIPIENTS):
-            raise EnvironmentError("EMAIL_RECIPIENTS environment variable is missing or empty")
-
-        email_gateway = EmailGateway(
-            api_key=os.getenv('RESEND_API_KEY'),
-            recipients=RECIPIENTS
+        check_env_vars()
+        
+        # Load settings
+        settings = Settings()
+        
+        # Create and run the news crew with all sources
+        logger.info("Creating news crew with multiple sources")
+        crew = create_rosetta_news_crew(
+            urls=settings.MEDICAL_NEWS_SOURCES,
+            language="English"
         )
-
-        # Process news
-        start_time = time.time()
-        logger.info("Starting medical news processing")
         
-        news_content = process_medical_news()
+        # Run the crew tasks
+        logger.info("Starting crew tasks")
+        crew_output = crew.kickoff()
+        news_digest = str(crew_output)  # Convert CrewOutput to string
         
-        if not news_content:
-            raise ValueError("No news content was successfully processed")
-
-        # Send email
-        logger.info("Sending email digest")
-        result = email_gateway._run(news_content)
-        if "Failed" in result:
-            raise RuntimeError("Failed to send email")
+        # Initialize email gateway
+        logger.info("Initializing email gateway")
+        recipients = settings.EMAIL_RECIPIENTS.split(",")
+        email_gateway = EmailGateway(
+            api_key=settings.RESEND_API_KEY,
+            recipients=recipients
+        )
         
-        end_time = time.time()
-        logger.info(f"News digest sent successfully! Processing time: {end_time - start_time:.2f} seconds")
+        # Send the news digest
+        logger.info("Sending news digest")
+        success = email_gateway.send_email(
+            markdown_content=news_digest,
+            subject=settings.EMAIL_SUBJECT
+        )
         
+        if success:
+            logger.info("News digest sent successfully")
+        else:
+            logger.error("Failed to send news digest")
+            
     except Exception as e:
         logger.error(f"Error in main process: {str(e)}")
+        logger.error(traceback.format_exc())
         raise
 
 if __name__ == "__main__":

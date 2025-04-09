@@ -16,7 +16,7 @@ class EmailSender(BaseModel):
         try:
             resend.api_key = self.api_key
             response = resend.Emails.send({
-                "from": "Rosetta News <onboarding@resend.dev>",
+                "from": "Medical Digest <onboarding@resend.dev>",
                 "to": to,
                 "subject": subject,
                 "html": html_content
@@ -50,8 +50,22 @@ class EmailGateway(BaseTool):
         )
         return "Email sent successfully" if success else "Failed to send email"
 
-    def send_email(self, markdown_content: str) -> str:
-        return self._run(markdown_content)
+    def send_email(self, markdown_content: str, subject: str = "Daily Medical & Surgical News Digest") -> bool:
+        """Send email with markdown content
+        
+        Args:
+            markdown_content: The markdown content to send
+            subject: Email subject (optional)
+            
+        Returns:
+            bool: True if email was sent successfully, False otherwise
+        """
+        html_content = self._convert_markdown_to_html(markdown_content)
+        return self.sender.send_email(
+            to=self.recipients,
+            subject=subject,
+            html_content=html_content
+        )
 
     def _convert_markdown_to_html(self, markdown_content: str) -> str:
         """Convert markdown content to HTML"""
