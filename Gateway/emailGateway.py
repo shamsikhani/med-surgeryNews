@@ -1,5 +1,4 @@
 import resend
-import os
 from typing import List
 from crewai.tools import BaseTool
 from pydantic import Field, BaseModel
@@ -21,8 +20,15 @@ class EmailSender(BaseModel):
                 "subject": subject,
                 "html": html_content
             })
-            logger.info(f"Email sent successfully to {len(to)} recipients")
-            return True
+            if isinstance(response, dict) and response.get("id"):
+                logger.info(
+                    f"Email sent successfully to {len(to)} recipients"
+                )
+                return True
+            logger.error(
+                f"Failed to send email. Unexpected response: {response}"
+            )
+            return False
         except Exception as e:
             logger.error(f"Unexpected error sending email: {str(e)}")
             return False
